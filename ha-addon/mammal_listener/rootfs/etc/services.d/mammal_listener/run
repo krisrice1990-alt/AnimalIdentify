@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bashio
+# s6-overlay service entrypoint for the HA Supervisor.
+exec python3 /app/listener/detector.py

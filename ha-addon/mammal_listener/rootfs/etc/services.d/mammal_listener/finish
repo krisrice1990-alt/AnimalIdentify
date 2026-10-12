@@ -1,0 +1,2 @@
+#!/usr/bin/execlineb -S0
+# If the detector exits, let s6 restart it (crash loops show in the add-on log).

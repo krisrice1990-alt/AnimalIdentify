@@ -1,0 +1,5 @@
+numpy
+scipy
+matplotlib
+ai-edge-litert      # TFLite inference in Python (YAMNet extraction, parity checks)
+tensorflow-cpu      # only needed for export_tflite.py (Keras -> TFLite conversion)

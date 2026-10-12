@@ -1,0 +1,32 @@
+# Audio data — too big for git, re-harvestable via dataset-scripts/
+raw/
+clips/
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+
+# Trained models (build artifacts)
+/share/
+*.tflite
+*.npz
+*.h5
+*.ckpt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Label packs with audio
+label-packs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~

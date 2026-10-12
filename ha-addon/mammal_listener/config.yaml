@@ -1,0 +1,34 @@
+name: Mammal Listener
+version: "0.1.0"
+slug: mammal_listener
+description: Low-CPU on-device AI that listens for wolves, coyotes, moose and bears, and reports detections to Home Assistant over MQTT.
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: auto
+audio: true
+hassio_api: false
+map:
+  - share:rw
+options:
+  mqtt_host: ""
+  mqtt_port: 8883
+  mqtt_tls: true
+  mqtt_user: ""
+  mqtt_password: ""
+  base_topic: mammal_listener
+  energy_threshold_db: -45
+  confidence_threshold: 0.6
+  cooldown_minutes: 10
+schema:
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_tls: bool
+  mqtt_user: str
+  mqtt_password: password
+  base_topic: str
+  energy_threshold_db: int
+  confidence_threshold: float
+  cooldown_minutes: int

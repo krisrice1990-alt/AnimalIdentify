@@ -1,0 +1,5 @@
+paho-mqtt>=1.6
+sounddevice>=0.4.6
+numpy>=1.26
+scipy>=1.11
+tflite-runtime>=2.14
