@@ -30,3 +30,8 @@ label-packs/
 Thumbs.db
 *.swp
 *~
+
+# Android build outputs
+*.apk
+*.idsig
+android/build/
