@@ -21,7 +21,7 @@ KOTLINC=~/kotlinc/bin/kotlinc
 STDLIB=~/maven-repo/org/jetbrains/kotlin/kotlin-stdlib/1.9.24/kotlin-stdlib-1.9.24.jar
 APP_ID=com.animalidentify.app
 KEYSTORE=$ROOT/animalidentify.keystore
-APK_NAME=AnimalIdentify-v1.apk
+APK_NAME=AnimalIdentify-v2.apk
 DEPS_JSON=$ROOT/deps/deps.json
 # Keep the APK lean: real phones are arm64 (Kris's Pixel 7).
 ABIS="arm64-v8a armeabi-v7a"
@@ -55,7 +55,7 @@ rm -f "$BUILD/base.apk"
   -I "$ANDROID_JAR" \
   --manifest "$BUILD/AndroidManifest.xml" \
   --min-sdk-version 26 --target-sdk-version 37 \
-  --version-code 1 --version-name "1.0" \
+  --version-code 2 --version-name "2.0" \
   --auto-add-overlay \
   --java "$BUILD/gen" \
   "$BUILD/compiled_res/app-res.zip" \
