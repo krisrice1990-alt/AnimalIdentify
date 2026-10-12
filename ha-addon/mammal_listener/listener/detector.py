@@ -2,9 +2,15 @@
 """Mammal Listener: low-CPU on-device animal detection for Home Assistant.
 
 Pipeline (matches mammal-model/INTERFACE.md):
-  mic 48 kHz mono -> 3 s windows -> energy gate (cheap) ->
+  audio 48 kHz mono -> 3 s windows -> energy gate (cheap) ->
   resample 16 kHz -> YAMNet frames -> mean-pooled 521 posteriors ->
   mammal-head.tflite -> softmax over [wolf, coyote, moose, dog]
+
+Audio sources (see listener/audio_sources.py):
+  - local microphone (default, `audio_source: mic`)
+  - any RTSP URL, e.g. an IP camera (`audio_source: rtsp`,
+    `rtsp_url: rtsp://...`) — ffmpeg pulls audio-only first, like BirdNET-Go
+  - Frigate cameras via go2rtc restream (`frigate_enabled: true`)
 
 Only windows that pass the energy gate reach YAMNet, so a quiet porch costs
 almost no CPU. Detections publish over MQTT with HA auto-discovery.
@@ -18,13 +24,20 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 import urllib.request
 
 import numpy as np
 import paho.mqtt.client as mqtt
-import sounddevice as sd
 from scipy.signal import resample_poly
+
+from audio_sources import (
+    MicSource,
+    RtspSource,
+    SourceLost,
+    build_frigate_url,
+)
 
 # 4-class model v1: wolf, coyote, moose, dog.
 # (Bear dropped — no real recordings exist; fox excluded — unverified.)
@@ -104,6 +117,137 @@ def run_tflite(it, x):
     return it.get_tensor(out["index"])
 
 
+def resolve_sources(opt):
+    """Build the list of (label, AudioSource) from the app options.
+
+    Priority: Frigate cameras > explicit RTSP URL > local microphone.
+    """
+    if opt.get("frigate_enabled"):
+        host = (opt.get("frigate_host") or "").strip()
+        if not host:
+            print("FATAL: frigate_enabled is true but frigate_host is empty.",
+                  flush=True)
+            sys.exit(1)
+        cams = list(opt.get("frigate_cameras") or [])
+        single = (opt.get("frigate_camera") or "").strip()
+        if single and single not in cams:
+            cams.insert(0, single)
+        if not cams:
+            print("FATAL: frigate_enabled is true but no frigate_camera / "
+                  "frigate_cameras are set.", flush=True)
+            sys.exit(1)
+        return [
+            (cam, RtspSource(build_frigate_url(host, cam), label=f"frigate:{cam}"))
+            for cam in cams
+        ]
+    if (opt.get("audio_source") or "mic") == "rtsp":
+        url = (opt.get("rtsp_url") or "").strip()
+        if not url:
+            print('FATAL: audio_source is "rtsp" but rtsp_url is empty.',
+                  flush=True)
+            sys.exit(1)
+        return [("rtsp", RtspSource(url, label="rtsp"))]
+    return [("mic", MicSource())]
+
+
+def run_source(label, source, yamnet, head, ctx):
+    """Capture -> energy gate -> YAMNet -> mammal head -> MQTT, forever.
+
+    One thread runs this per audio source. `ctx` carries the shared MQTT
+    client, topic base, thresholds, and per-(source, class) cooldowns.
+    """
+    client = ctx["client"]
+    base = ctx["base"]
+    energy_db = ctx["energy_db"]
+    conf_thr = ctx["conf_thr"]
+    cooldown_s = ctx["cooldown_s"]
+    last_fired = ctx["last_fired"]
+
+    # Initial connect: keep retrying with backoff (a camera may not be
+    # up yet when the app starts).
+    while True:
+        try:
+            source.start()
+            break
+        except SourceLost as e:
+            print(f"[{label}] {e}", flush=True)
+            try:
+                source.reconnect()
+            except Exception as e2:  # never let a source thread die silently
+                print(f"[{label}] reconnect failed: {e2}", flush=True)
+    print(f"[{label}] listening via {source.describe()}", flush=True)
+    while True:
+        try:
+            clip = source.read_window(WIN_N)
+        except SourceLost as e:
+            print(f"[{label}] {e}", flush=True)
+            try:
+                source.reconnect()
+            except Exception as e2:  # never let a source thread die silently
+                print(f"[{label}] reconnect failed: {e2}", flush=True)
+            continue
+        except Exception as e:
+            print(f"[{label}] capture error: {e}", flush=True)
+            break
+
+        # Energy gate: silence costs nothing beyond this line.
+        if dbfs(clip) < energy_db:
+            continue
+
+        # 48 kHz -> 16 kHz, then YAMNet frames.
+        clip16 = resample_poly(clip, 1, 3).astype(np.float32)
+        frames = []
+        for start in range(0, len(clip16) - YAMNET_WIN + 1, YAMNET_HOP):
+            frames.append(clip16[start:start + YAMNET_WIN])
+        if not frames:
+            continue
+        posts = []
+        for fr in frames:
+            out = run_tflite(yamnet, fr.reshape(1, -1))
+            posts.append(out.reshape(-1))
+        pooled = np.mean(np.stack(posts), axis=0, keepdims=True)  # (1, 521)
+
+        scores = run_tflite(head, pooled).reshape(-1)  # (4,) softmax
+        top = int(np.argmax(scores))
+        now = time.time()
+        key = (label, CLASSES[top])
+        if scores[top] >= conf_thr and now - last_fired.get(key, 0.0) >= cooldown_s:
+            cls = CLASSES[top]
+            last_fired[key] = now
+            common, scientific = SPECIES_INFO[cls]
+            conf = round(float(scores[top]), 4)
+            dt = time.localtime(now)
+            # Dual-dialect payload: PascalCase = BirdNET-Go, snake_case =
+            # BirdNET-Pi. Any HA setup that understands BirdNET-Go
+            # understands this with zero changes. "Camera" names the audio
+            # source (mic / rtsp / frigate:<camera>).
+            payload = {
+                "Time": time.strftime("%H:%M:%S", dt),
+                "Date": time.strftime("%Y-%m-%d", dt),
+                "CommonName": common,
+                "ScientificName": scientific,
+                "Confidence": conf,
+                "Source": "animal-identify",
+                "Camera": label,
+                "time": time.strftime("%H:%M:%S", dt),
+                "date": time.strftime("%Y-%m-%d", dt),
+                "common_name": common,
+                "scientific_name": scientific,
+                "confidence_score": conf,
+                "camera": label,
+            }
+            client.publish(
+                f"{base}/detections/{cls}",
+                json.dumps(payload),
+                qos=1,
+                retain=True,
+            )
+            client.publish(
+                f"{base}/detections/last", json.dumps(payload), qos=1, retain=True
+            )
+            print(f"[{label}] detection: {payload}", flush=True)
+
+
 def main():
     opt = load_options()
 
@@ -118,10 +262,16 @@ def main():
         )
         sys.exit(1)
 
-    print("Loading YAMNet extractor...", flush=True)
-    yamnet = load_tflite("/app/models/yamnet.tflite")
-    print("Loading mammal head...", flush=True)
-    head = load_tflite(head_path)
+    # Resolve audio sources before touching the network: fail fast on a
+    # bad rtsp_url / frigate config instead of connecting MQTT first.
+    sources = resolve_sources(opt)
+    print(f"Audio source(s): {[label for label, _ in sources]}", flush=True)
+
+    # Fail fast if YAMNet is missing (per-thread interpreters load later).
+    yamnet_path = "/app/models/yamnet.tflite"
+    if not os.path.exists(yamnet_path):
+        print(f"FATAL: YAMNet model not found at {yamnet_path}.", flush=True)
+        sys.exit(1)
 
     base = opt["base_topic"].strip().strip("/")
 
@@ -190,93 +340,44 @@ def main():
             qos=1,
             retain=True,
         )
-    print("Discovery published. Listening...", flush=True)
+    print("Discovery published.", flush=True)
 
-    energy_db = float(opt.get("energy_threshold_db", -45))
-    conf_thr = float(opt.get("confidence_threshold", 0.6))
-    cooldown_s = float(opt.get("cooldown_minutes", 10)) * 60.0
-    last_fired = {c: 0.0 for c in CLASSES}
+    # Each source gets its own thread and its own YAMNet/head
+    # interpreters (interpreters are not thread-safe); they share the
+    # MQTT client (paho publish is thread-safe).
+    ctx = {
+        "client": client,
+        "base": base,
+        "energy_db": float(opt.get("energy_threshold_db", -45)),
+        "conf_thr": float(opt.get("confidence_threshold", 0.6)),
+        "cooldown_s": float(opt.get("cooldown_minutes", 10)) * 60.0,
+        "last_fired": {},  # (source_label, class) -> timestamp
+    }
 
-    def audio_callback(indata, frames, time_info, status):
-        if status:
-            print(f"audio status: {status}", flush=True)
-        window_q.append(indata[:, 0].copy())
-
-    window_q = []
-    stream = sd.InputStream(
-        samplerate=SR, channels=1, dtype="float32", callback=audio_callback
-    )
-    stream.start()
+    threads = []
+    for label, source in sources:
+        # Interpreters are not thread-safe: one pair per source thread.
+        src_yamnet = load_tflite("/app/models/yamnet.tflite")
+        src_head = load_tflite(head_path)
+        t = threading.Thread(
+            target=run_source,
+            args=(label, source, src_yamnet, src_head, ctx),
+            name=f"mammal-src-{label}",
+            daemon=True,
+        )
+        t.start()
+        threads.append(t)
+    print(f"Discovery published. Listening on {len(sources)} source(s)...",
+          flush=True)
     try:
-        while True:
-            # Assemble one 3 s window.
-            buf = []
-            need = WIN_N
-            while need > 0:
-                time.sleep(0.05)
-                while window_q and need > 0:
-                    chunk = window_q.pop(0)
-                    take = min(len(chunk), need)
-                    buf.append(chunk[:take])
-                    need -= take
-                    if take < len(chunk):
-                        window_q.insert(0, chunk[take:])
-            clip = np.concatenate(buf) if buf else np.zeros(WIN_N, dtype=np.float32)
-
-            # Energy gate: silence costs nothing beyond this line.
-            if dbfs(clip) < energy_db:
-                continue
-
-            # 48 kHz -> 16 kHz, then YAMNet frames.
-            clip16 = resample_poly(clip, 1, 3).astype(np.float32)
-            frames = []
-            for start in range(0, len(clip16) - YAMNET_WIN + 1, YAMNET_HOP):
-                frames.append(clip16[start : start + YAMNET_WIN])
-            if not frames:
-                continue
-            posts = []
-            for fr in frames:
-                out = run_tflite(yamnet, fr.reshape(1, -1))
-                posts.append(out.reshape(-1))
-            pooled = np.mean(np.stack(posts), axis=0, keepdims=True)  # (1, 521)
-
-            scores = run_tflite(head, pooled).reshape(-1)  # (4,) softmax
-            top = int(np.argmax(scores))
-            now = time.time()
-            if scores[top] >= conf_thr and now - last_fired[CLASSES[top]] >= cooldown_s:
-                cls = CLASSES[top]
-                last_fired[cls] = now
-                common, scientific = SPECIES_INFO[cls]
-                conf = round(float(scores[top]), 4)
-                dt = time.localtime(now)
-                # Dual-dialect payload: PascalCase = BirdNET-Go, snake_case =
-                # BirdNET-Pi. Any HA setup that understands BirdNET-Go
-                # understands this with zero changes.
-                payload = {
-                    "Time": time.strftime("%H:%M:%S", dt),
-                    "Date": time.strftime("%Y-%m-%d", dt),
-                    "CommonName": common,
-                    "ScientificName": scientific,
-                    "Confidence": conf,
-                    "Source": "animal-identify",
-                    "time": time.strftime("%H:%M:%S", dt),
-                    "date": time.strftime("%Y-%m-%d", dt),
-                    "common_name": common,
-                    "scientific_name": scientific,
-                    "confidence_score": conf,
-                }
-                client.publish(
-                    f"{base}/detections/{cls}",
-                    json.dumps(payload),
-                    qos=1,
-                    retain=True,
-                )
-                client.publish(
-                    f"{base}/detections/last", json.dumps(payload), qos=1, retain=True
-                )
-                print(f"detection: {payload}", flush=True)
+        for t in threads:
+            t.join()
     finally:
-        stream.stop()
+        for _label, source in sources:
+            try:
+                source.stop()
+            except Exception:
+                pass
         client.publish(f"{base}/status", "offline", qos=1, retain=True)
         client.loop_stop()
 
