@@ -1,0 +1,38 @@
+name: Mammal Listener
+version: "1.0.0"
+slug: mammal_listener
+description: Low-CPU on-device AI that listens for wolves, coyotes, moose and dogs, and reports detections to Home Assistant over MQTT (BirdNET-Go compatible).
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: auto
+audio: true
+hassio_api: true
+map:
+  - share:rw
+options:
+  mqtt_auto_config: true
+  mqtt_host: ""
+  mqtt_port: 8883
+  mqtt_tls: true
+  mqtt_user: ""
+  mqtt_password: ""
+  base_topic: mammal_listener
+  model_path: /app/models/mammal-head.tflite
+  energy_threshold_db: -45
+  confidence_threshold: 0.6
+  cooldown_minutes: 10
+schema:
+  mqtt_auto_config: bool
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_tls: bool
+  mqtt_user: str
+  mqtt_password: str
+  base_topic: str
+  model_path: str
+  energy_threshold_db: int
+  confidence_threshold: float
+  cooldown_minutes: int
