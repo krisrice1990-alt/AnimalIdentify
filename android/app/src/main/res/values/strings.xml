@@ -6,7 +6,7 @@
     <string name="listening">Listening…</string>
     <string name="stop">Stop</string>
     <string name="history">History</string>
-    <string name="draft_model_notice">Draft model: wolf / fox only</string>
+    <string name="draft_model_notice">4 animals • 67% accuracy</string>
     <string name="no_detections">No detections yet</string>
     <string name="mic_permission_needed">Microphone permission is needed to identify animal sounds.</string>
     <string name="mic_permission_denied">Microphone access denied. Enable it in Settings to use Animal Identify.</string>
