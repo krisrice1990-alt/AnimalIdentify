@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Animal Identify</string>
+    <string name="history_title">Detection History</string>
+    <string name="tap_to_listen">Tap to listen</string>
+    <string name="listening">Listening…</string>
+    <string name="stop">Stop</string>
+    <string name="history">History</string>
+    <string name="draft_model_notice">Draft model: wolf / fox only</string>
+    <string name="no_detections">No detections yet</string>
+    <string name="mic_permission_needed">Microphone permission is needed to identify animal sounds.</string>
+    <string name="mic_permission_denied">Microphone access denied. Enable it in Settings to use Animal Identify.</string>
+    <string name="model_missing">AI model files are missing. Reinstall the app.</string>
+    <string name="inference_error">Could not analyze that sound. Try again.</string>
+    <string name="delete">Delete</string>
+    <string name="delete_confirm">Delete this recording?</string>
+    <string name="cancel">Cancel</string>
+    <string name="empty_history">No recordings yet. Tap the big button to start listening.</string>
+    <string name="confidence">Confidence</string>
+    <string name="unknown">Uncertain</string>
+</resources>

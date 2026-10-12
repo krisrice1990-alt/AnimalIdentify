@@ -1,0 +1,14 @@
+{
+ "jars": [
+  "/home/hatch/workspace/animal-identify/android/deps/tensorflow-lite-2.15.0-classes.jar",
+  "/home/hatch/workspace/animal-identify/android/deps/tflite-api-stub.jar"
+ ],
+ "libs": [
+  {
+   "safe": "tensorflow-lite-2.15.0",
+   "aar_file": "/home/hatch/workspace/animal-identify/android/deps/tensorflow-lite-2.15.0.aar",
+   "res_dir": null
+  }
+ ],
+ "extra_packages": []
+}

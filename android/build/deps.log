@@ -1,0 +1,5 @@
+cached: tensorflow-lite-2.15.0.aar
+added stub: /home/hatch/workspace/animal-identify/android/deps/tflite-api-stub.jar
+wrote deps.json
+ jar: /home/hatch/workspace/animal-identify/android/deps/tensorflow-lite-2.15.0-classes.jar 27946
+ jar: /home/hatch/workspace/animal-identify/android/deps/tflite-api-stub.jar 682
