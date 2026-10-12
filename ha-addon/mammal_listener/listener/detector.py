@@ -28,6 +28,16 @@ SR = 48000
 WIN_S = 3.0
 WIN_N = int(SR * WIN_S)
 
+# BirdNET-Go-compatible species names (dual-dialect payload).
+SPECIES_INFO = {
+    "wolf": ("Gray Wolf", "Canis lupus"),
+    "coyote": ("Coyote", "Canis latrans"),
+    "moose": ("Moose", "Alces alces"),
+    "bear": ("Bear", "Ursus americanus"),
+    "dog": ("Dog", "Canis lupus familiaris"),
+    "background": ("Background", ""),
+}
+
 # YAMNet framing per INTERFACE.md (16 kHz): 15,600-sample windows, hop 7,680.
 YAMNET_WIN = 15600
 YAMNET_HOP = 7680
@@ -106,7 +116,7 @@ def main():
                     "name": f"Mammal Listener {cls}",
                     "unique_id": f"mammal_listener_{cls}",
                     "state_topic": f"{base}/detections/{cls}",
-                    "value_template": "{{ value_json.confidence }}",
+                    "value_template": "{{ (value_json.Confidence * 100) | round(1) }}",
                     "unit_of_measurement": "%",
                     "json_attributes_topic": f"{base}/detections/{cls}",
                     "device": device,
@@ -171,11 +181,24 @@ def main():
             if scores[top] >= conf_thr and now - last_fired[CLASSES[top]] >= cooldown_s:
                 cls = CLASSES[top]
                 last_fired[cls] = now
+                common, scientific = SPECIES_INFO[cls]
+                conf = round(float(scores[top]), 4)
+                dt = time.localtime(now)
+                # Dual-dialect payload: PascalCase = BirdNET-Go, snake_case =
+                # BirdNET-Pi. Any HA setup that understands BirdNET-Go
+                # understands this with zero changes.
                 payload = {
-                    "species": cls,
-                    "confidence": round(float(scores[top]) * 100.0, 1),
-                    "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    "source": "mammal_listener",
+                    "Time": time.strftime("%H:%M:%S", dt),
+                    "Date": time.strftime("%Y-%m-%d", dt),
+                    "CommonName": common,
+                    "ScientificName": scientific,
+                    "Confidence": conf,
+                    "Source": "animal-identify",
+                    "time": time.strftime("%H:%M:%S", dt),
+                    "date": time.strftime("%Y-%m-%d", dt),
+                    "common_name": common,
+                    "scientific_name": scientific,
+                    "confidence_score": conf,
                 }
                 if cls not in ("dog", "background"):
                     client.publish(
