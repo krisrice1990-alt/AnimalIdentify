@@ -1,7 +1,7 @@
 name: Mammal Listener
 version: "1.0.0"
 slug: mammal_listener
-description: Low-CPU on-device AI that listens for wolves, coyotes, moose and dogs, and reports detections to Home Assistant over MQTT (BirdNET-Go compatible).
+description: Low-CPU on-device AI that listens for wolves, coyotes, moose and dogs — via microphone, RTSP camera, or Frigate — and reports detections to Home Assistant over MQTT (BirdNET-Go compatible).
 arch:
   - aarch64
   - amd64
@@ -24,6 +24,12 @@ options:
   energy_threshold_db: -45
   confidence_threshold: 0.6
   cooldown_minutes: 10
+  audio_source: mic
+  rtsp_url: ""
+  frigate_enabled: false
+  frigate_host: ""
+  frigate_camera: ""
+  frigate_cameras: []
 schema:
   mqtt_auto_config: bool
   mqtt_host: str
@@ -36,3 +42,9 @@ schema:
   energy_threshold_db: int
   confidence_threshold: float
   cooldown_minutes: int
+  audio_source: list(mic|rtsp)
+  rtsp_url: str
+  frigate_enabled: bool
+  frigate_host: str
+  frigate_camera: str
+  frigate_cameras: ["str"]
