@@ -7,7 +7,8 @@ animals. No audio ever leaves the device — only detection metadata
 
 ## What it does
 
-- Captures microphone audio in 3-second windows (48 kHz mono)
+- Captures audio in 3-second windows (48 kHz mono) from a microphone,
+  an RTSP camera, or Frigate cameras
 - Cheap energy gate skips silence (a quiet porch costs almost no CPU)
 - YAMNet feature extraction → trained 4-class classifier (66.6% accuracy
   on human-verified audio; wolf↔dog is the hardest pair)
@@ -20,9 +21,43 @@ animals. No audio ever leaves the device — only detection metadata
 ## Requirements
 
 - Home Assistant OS or Supervised (needs the Supervisor + Apps panel)
-- A microphone on the HA host (USB mic works)
+- An audio source: a microphone on the HA host (USB mic works), **or**
+  an IP/security camera with a microphone, **or** the Frigate app
 - The **Mosquitto broker** app installed (for MQTT). Mammal Listener reads
   its credentials automatically from the Supervisor — no manual config.
+
+## Audio sources
+
+Three options, picked with the `audio_source` / Frigate settings:
+
+**1. Microphone (default).** Plug a USB mic into the HA host. Nothing to
+configure — `audio_source: mic`.
+
+**2. RTSP camera.** Any IP/security camera with a microphone that exposes
+an RTSP stream. Set:
+```yaml
+audio_source: rtsp
+rtsp_url: rtsp://192.168.1.100:554/stream1   # your camera's audio stream
+```
+The app pulls **audio-only** from the camera first (no video decoder slot
+wasted on the camera — same approach as BirdNET-Go) and automatically
+falls back to the full stream if the camera can't do audio-only.
+
+**3. Frigate.** If you run the Frigate app, Mammal Listener can listen
+through its cameras via Frigate's built-in go2rtc restream — no need to
+dig up RTSP URLs. Set:
+```yaml
+frigate_enabled: true
+frigate_host: ccab4aaf-frigate   # or its IP, e.g. 192.168.1.100
+frigate_camera: driveway         # one camera...
+frigate_cameras: [driveway, porch]  # ...or several at once
+```
+Each camera runs detection in parallel and every detection payload
+names its camera (`Camera` / `camera` fields), so you can tell which
+camera heard the animal.
+
+Tip: `frigate_host` accepts the Frigate app's internal hostname
+(`ccab4aaf-frigate`) or a plain IP address.
 
 ## Install
 
@@ -61,7 +96,8 @@ snake_case equivalents for BirdNET-Pi-style consumers:
   "common_name": "Coyote", "scientific_name": "Canis latrans",
   "confidence_score": 0.8234,
   "date": "2026-10-12", "time": "14:22:10",
-  "Source": "animal-identify"
+  "Source": "animal-identify",
+  "Camera": "frigate:driveway", "camera": "frigate:driveway"
 }
 ```
 
@@ -79,6 +115,12 @@ no audio is recorded to disk or sent anywhere.
 | `energy_threshold_db` | `-45` | Windows quieter than this are skipped |
 | `confidence_threshold` | `0.6` | Detections below this are ignored |
 | `cooldown_minutes` | `10` | Minimum gap between repeat detections of the same animal |
+| `audio_source` | `mic` | `mic` or `rtsp` — where audio comes from |
+| `rtsp_url` | `""` | Camera stream URL (when `audio_source: rtsp`) |
+| `frigate_enabled` | `false` | Listen through Frigate cameras instead |
+| `frigate_host` | `""` | Frigate hostname (e.g. `ccab4aaf-frigate`) or IP |
+| `frigate_camera` | `""` | Single Frigate camera name |
+| `frigate_cameras` | `[]` | Multiple Frigate camera names (each runs detection) |
 
 ## What's tested vs not
 
@@ -88,18 +130,29 @@ no audio is recorded to disk or sent anywhere.
 - Detector Python compiles clean; all pure-logic tests pass (energy
   gate math, Supervisor MQTT auto-config parsing, dual-dialect payload
   construction, HA discovery config, options loading)
-- `config.yaml` parses and options/schema keys match
+- `config.yaml` parses and options/schema keys match (incl. new
+  `audio_source` / `rtsp_url` / `frigate_*` options)
 - Dockerfile COPY sources all exist; YAMNet download URL verified live
-  (redirects to Google Cloud Storage, returns valid TFLite bytes)
+  (redirects to Google Cloud Storage, returns valid TFLite bytes);
+  `ffmpeg` is already in the Dockerfile's apt packages (needed for RTSP)
 - MQTT payload fields verified field-by-field against BirdNET-Go's
   published format (`CommonName`, `ScientificName`, `Confidence`,
   `Date`, `Time`, `Source`); connection pattern (retained messages,
   Supervisor broker lookup) matches the BirdNET-Go HA app approach
+- RTSP plumbing (2026-10-12): ffmpeg command builder verified
+  (audio-only `-allowed_media_types audio` first, `-vn` fallback —
+  same as BirdNET-Go); Frigate go2rtc URL builder verified
+  (`rtsp://<host>:8554/<camera>`); source selection logic tested
+  (mic default / rtsp / frigate single+multi / frigate priority /
+  fatal-on-missing-config paths); live pipe test with ffmpeg-generated
+  audio confirmed exact 3 s float32 windows, correct tone content, clean
+  EOF → reconnect-signal, and restart
 
 **NOT tested — do not assume these work yet:**
 - Docker image build (no Docker in this environment)
 - Install on a real Home Assistant host
 - Microphone capture on HA hardware
+- RTSP against a real camera or Frigate instance (no network/hardware here)
 - End-to-end: real animal sound → MQTT → HA sensor
 - The Supervisor MQTT auto-config against a live Mosquitto app
 
