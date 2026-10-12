@@ -9,10 +9,11 @@ arch:
 startup: application
 boot: auto
 audio: true
-hassio_api: false
+hassio_api: true
 map:
   - share:rw
 options:
+  mqtt_auto_config: true
   mqtt_host: ""
   mqtt_port: 8883
   mqtt_tls: true
@@ -23,6 +24,7 @@ options:
   confidence_threshold: 0.6
   cooldown_minutes: 10
 schema:
+  mqtt_auto_config: bool
   mqtt_host: str
   mqtt_port: int
   mqtt_tls: bool

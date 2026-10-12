@@ -17,6 +17,7 @@ import math
 import os
 import sys
 import time
+import urllib.request
 
 import numpy as np
 import paho.mqtt.client as mqtt
@@ -61,6 +62,37 @@ def load_tflite(path):
     return it
 
 
+def supervisor_mqtt_config():
+    """Pull MQTT broker credentials from the HA Supervisor, BirdNET-Go style.
+
+    Returns (host, port, username, password, use_tls) or None if the
+    Supervisor API is unavailable or no MQTT service is configured.
+    """
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return None
+    try:
+        req = urllib.request.Request(
+            "http://supervisor/services/mqtt",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8")).get("data", {})
+        host = data.get("host")
+        if not host:
+            return None
+        return (
+            host,
+            int(data.get("port", 1883)),
+            data.get("username") or "",
+            data.get("password") or "",
+            bool(data.get("ssl", False)),
+        )
+    except Exception as e:
+        print(f"Supervisor MQTT lookup failed: {e}", flush=True)
+        return None
+
+
 def run_tflite(it, x):
     inp = it.get_input_details()[0]
     out = it.get_output_details()[0]
@@ -88,13 +120,44 @@ def main():
     head = load_tflite(head_path)
 
     base = opt["base_topic"].strip().strip("/")
+
+    # MQTT connection: BirdNET-Go style. When mqtt_auto_config is on (default),
+    # broker credentials come straight from the HA Supervisor — no manual entry.
+    # Falls back to the manual mqtt_host/port/user/password options.
+    mqtt_host = opt.get("mqtt_host") or ""
+    mqtt_port = int(opt.get("mqtt_port") or 1883)
+    mqtt_user = opt.get("mqtt_user") or ""
+    mqtt_password = opt.get("mqtt_password") or ""
+    mqtt_tls = bool(opt.get("mqtt_tls"))
+    if opt.get("mqtt_auto_config"):
+        auto = supervisor_mqtt_config()
+        if auto:
+            mqtt_host, mqtt_port, mqtt_user, mqtt_password, mqtt_tls = auto
+            print(
+                f"MQTT auto-config: broker {mqtt_host}:{mqtt_port} "
+                f"(tls={mqtt_tls}) from Supervisor",
+                flush=True,
+            )
+        else:
+            print(
+                "MQTT auto-config found nothing; using manual options",
+                flush=True,
+            )
+    if not mqtt_host:
+        print(
+            "FATAL: no MQTT broker. Enable mqtt_auto_config with the Mosquitto "
+            "add-on installed, or set mqtt_host manually.",
+            flush=True,
+        )
+        sys.exit(1)
+
     client = mqtt.Client(client_id="mammal_listener")
-    if opt.get("mqtt_user"):
-        client.username_pw_set(opt["mqtt_user"], opt.get("mqtt_password") or "")
-    if opt.get("mqtt_tls"):
+    if mqtt_user:
+        client.username_pw_set(mqtt_user, mqtt_password)
+    if mqtt_tls:
         client.tls_set()
     client.will_set(f"{base}/status", "offline", qos=1, retain=True)
-    client.connect(opt["mqtt_host"], int(opt["mqtt_port"]), keepalive=60)
+    client.connect(mqtt_host, mqtt_port, keepalive=60)
     client.loop_start()
     client.publish(f"{base}/status", "online", qos=1, retain=True)
 
@@ -202,7 +265,10 @@ def main():
                 }
                 if cls not in ("dog", "background"):
                     client.publish(
-                        f"{base}/detections/{cls}", json.dumps(payload), qos=1
+                        f"{base}/detections/{cls}",
+                        json.dumps(payload),
+                        qos=1,
+                        retain=True,
                     )
                     client.publish(
                         f"{base}/detections/last", json.dumps(payload), qos=1, retain=True
