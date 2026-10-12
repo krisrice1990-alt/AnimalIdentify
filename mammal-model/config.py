@@ -3,7 +3,7 @@
 Classes follow the dataset-chat contract:
   wolf / coyote / moose / bear / dog (negative) / background
 Dataset layout expected from the dataset chat:
-  ~/workspace/field-listener/mammal-dataset/<split>/<class>/*.wav   (48 kHz WAV)
+  ./dataset/<split>/<class>/*.wav   (48 kHz WAV)
 """
 
 CLASSES = ["wolf", "fox"]  # DRAFT-ONLY 2-class subset (unverified labels)

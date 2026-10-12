@@ -40,13 +40,13 @@ API = "https://api.inaturalist.org/v1/observations"
 
 def api_get(params):
     url = API + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "FieldListener-Dataset/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "AnimalIdentify-Dataset/1.0"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
 
 
 def download(url, dest):
-    req = urllib.request.Request(url, headers={"User-Agent": "FieldListener-Dataset/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "AnimalIdentify-Dataset/1.0"})
     with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
         while True:
             chunk = r.read(65536)

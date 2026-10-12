@@ -3,7 +3,7 @@
 ## What this is
 A Home Assistant add-on that listens for **wolf, coyote, moose, bear**
 (plus dog/background negatives) and reports detections to Home Assistant
-over MQTT with auto-discovery. Companion to the FieldListener phone app.
+over MQTT with auto-discovery. Standalone wildlife sound identification with Home Assistant integration.
 All code + AI training database pipeline. Built 2026-10-12 by Muse for Kris.
 
 ## The add-on (`ha-mammal-addon/`)

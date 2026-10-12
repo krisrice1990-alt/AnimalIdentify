@@ -92,7 +92,7 @@ def main():
     device = {
         "identifiers": ["mammal_listener"],
         "name": "Mammal Listener",
-        "manufacturer": "FieldListener",
+        "manufacturer": "AnimalIdentify",
         "model": "mammal-head v1",
     }
     for cls in CLASSES:

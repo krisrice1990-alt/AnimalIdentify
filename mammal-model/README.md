@@ -38,15 +38,15 @@ evaluates, and exports the TFLite head.
 ## Real data (when the dataset chat delivers)
 
 ```bash
-python3 dataset.py --root ~/workspace/field-listener/mammal-dataset \
+python3 dataset.py --root ./dataset \
     --kind yamnet --augment-train
-python3 train.py --cache ~/workspace/field-listener/mammal-dataset/cache_yamnet.npz \
+python3 train.py --cache ./dataset/cache_yamnet.npz \
     --out-dir runs/real_yamnet
 python3 evaluate.py --weights runs/real_yamnet/weights.npz \
-    --cache ~/workspace/field-listener/mammal-dataset/cache_yamnet.npz \
+    --cache ./dataset/cache_yamnet.npz \
     --out-dir runs/real_yamnet --title "real-data yamnet head"
 python3 export_tflite.py --weights runs/real_yamnet/weights.npz \
-    --cache ~/workspace/field-listener/mammal-dataset/cache_yamnet.npz \
+    --cache ./dataset/cache_yamnet.npz \
     --out runs/real_yamnet/mammal-head.tflite
 ```
 
