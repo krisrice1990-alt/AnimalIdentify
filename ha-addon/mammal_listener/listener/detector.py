@@ -4,13 +4,15 @@
 Pipeline (matches mammal-model/INTERFACE.md):
   mic 48 kHz mono -> 3 s windows -> energy gate (cheap) ->
   resample 16 kHz -> YAMNet frames -> mean-pooled 521 posteriors ->
-  mammal-head.tflite -> softmax over [wolf, coyote, moose, bear, dog, background]
+  mammal-head.tflite -> softmax over [wolf, coyote, moose, dog]
 
 Only windows that pass the energy gate reach YAMNet, so a quiet porch costs
 almost no CPU. Detections publish over MQTT with HA auto-discovery.
 
 Config: /data/options.json (written by the HA Supervisor from config.yaml).
-Model:  /share/mammal-head.tflite (copied there after training; NOT shipped).
+Model:  bundled at /app/models/mammal-head.tflite (built into the app
+         image). Set the `model_path` option to point at a custom model
+         (e.g. /share/mammal-head.tflite) to override it.
 """
 import json
 import math
@@ -24,7 +26,10 @@ import paho.mqtt.client as mqtt
 import sounddevice as sd
 from scipy.signal import resample_poly
 
-CLASSES = ["wolf", "coyote", "moose", "bear", "dog", "background"]
+# 4-class model v1: wolf, coyote, moose, dog.
+# (Bear dropped — no real recordings exist; fox excluded — unverified.)
+# Clean-test accuracy on Kris-verified audio: 66.6%.
+CLASSES = ["wolf", "coyote", "moose", "dog"]
 SR = 48000
 WIN_S = 3.0
 WIN_N = int(SR * WIN_S)
@@ -34,9 +39,7 @@ SPECIES_INFO = {
     "wolf": ("Gray Wolf", "Canis lupus"),
     "coyote": ("Coyote", "Canis latrans"),
     "moose": ("Moose", "Alces alces"),
-    "bear": ("Bear", "Ursus americanus"),
     "dog": ("Dog", "Canis lupus familiaris"),
-    "background": ("Background", ""),
 }
 
 # YAMNet framing per INTERFACE.md (16 kHz): 15,600-sample windows, hop 7,680.
@@ -104,12 +107,13 @@ def run_tflite(it, x):
 def main():
     opt = load_options()
 
-    head_path = "/share/mammal-head.tflite"
+    # Model: bundled in the image, overridable via the `model_path` option.
+    head_path = opt.get("model_path") or "/app/models/mammal-head.tflite"
     if not os.path.exists(head_path):
         print(
-            "FATAL: /share/mammal-head.tflite not found. Train the model first "
-            "(mammal-model/README.md) and copy mammal-head.tflite to the "
-            "add-on's /share directory, then restart.",
+            f"FATAL: mammal-head model not found at {head_path}. The app "
+            "image bundles it at /app/models/mammal-head.tflite; if you set "
+            "model_path manually, make sure that file exists.",
             flush=True,
         )
         sys.exit(1)
@@ -146,7 +150,7 @@ def main():
     if not mqtt_host:
         print(
             "FATAL: no MQTT broker. Enable mqtt_auto_config with the Mosquitto "
-            "add-on installed, or set mqtt_host manually.",
+            "app installed, or set mqtt_host manually.",
             flush=True,
         )
         sys.exit(1)
@@ -166,11 +170,9 @@ def main():
         "identifiers": ["mammal_listener"],
         "name": "Mammal Listener",
         "manufacturer": "AnimalIdentify",
-        "model": "mammal-head v1",
+        "model": "mammal-head 4-class v1",
     }
     for cls in CLASSES:
-        if cls in ("dog", "background"):
-            continue
         cfg_topic = f"homeassistant/sensor/mammal_listener/{cls}/config"
         client.publish(
             cfg_topic,
@@ -238,7 +240,7 @@ def main():
                 posts.append(out.reshape(-1))
             pooled = np.mean(np.stack(posts), axis=0, keepdims=True)  # (1, 521)
 
-            scores = run_tflite(head, pooled).reshape(-1)  # (6,) softmax
+            scores = run_tflite(head, pooled).reshape(-1)  # (4,) softmax
             top = int(np.argmax(scores))
             now = time.time()
             if scores[top] >= conf_thr and now - last_fired[CLASSES[top]] >= cooldown_s:
@@ -263,16 +265,15 @@ def main():
                     "scientific_name": scientific,
                     "confidence_score": conf,
                 }
-                if cls not in ("dog", "background"):
-                    client.publish(
-                        f"{base}/detections/{cls}",
-                        json.dumps(payload),
-                        qos=1,
-                        retain=True,
-                    )
-                    client.publish(
-                        f"{base}/detections/last", json.dumps(payload), qos=1, retain=True
-                    )
+                client.publish(
+                    f"{base}/detections/{cls}",
+                    json.dumps(payload),
+                    qos=1,
+                    retain=True,
+                )
+                client.publish(
+                    f"{base}/detections/last", json.dumps(payload), qos=1, retain=True
+                )
                 print(f"detection: {payload}", flush=True)
     finally:
         stream.stop()
