@@ -1,8 +1,8 @@
 # Mammal Listener — Home Assistant App
 
 On-device AI that listens for **wolf, coyote, moose and dog** sounds and
-reports detections to Home Assistant over MQTT — like BirdNET-Go, but for
-animals. No audio ever leaves the device — only detection metadata
+reports detections to Home Assistant over MQTT. No audio ever leaves
+the device — only detection metadata
 (animal name + confidence + timestamp).
 
 ## What it does
@@ -12,10 +12,9 @@ animals. No audio ever leaves the device — only detection metadata
 - Cheap energy gate skips silence (a quiet porch costs almost no CPU)
 - YAMNet feature extraction → trained 4-class classifier (66.6% accuracy
   on human-verified audio; wolf↔dog is the hardest pair)
-- Publishes BirdNET-Go-style MQTT payloads: the same PascalCase field
+- Publishes structured MQTT payloads with PascalCase field
   names (`CommonName`, `ScientificName`, `Confidence`, `Date`, `Time`)
-  on retained topics, so anything that consumes BirdNET-Go detections
-  understands these too
+  on retained topics
 - HA MQTT auto-discovery: one sensor per animal + online/offline status
 
 ## Requirements
@@ -40,7 +39,7 @@ audio_source: rtsp
 rtsp_url: rtsp://192.168.1.100:554/stream1   # your camera's audio stream
 ```
 The app pulls **audio-only** from the camera first (no video decoder slot
-wasted on the camera — same approach as BirdNET-Go) and automatically
+wasted on the camera) and automatically
 falls back to the full stream if the camera can't do audio-only.
 
 **3. Frigate.** If you run the Frigate app, Mammal Listener can listen
@@ -86,8 +85,8 @@ Base topic (configurable): `mammal_listener`
 | `mammal_listener/detections/dog` | yes | last dog detection JSON |
 | `mammal_listener/detections/last` | yes | most recent detection, any animal |
 
-Detection payload — same shape as BirdNET-Go (PascalCase), plus
-snake_case equivalents for BirdNET-Pi-style consumers:
+Detection payload — PascalCase fields, plus
+snake_case equivalents:
 
 ```json
 {
@@ -101,7 +100,7 @@ snake_case equivalents for BirdNET-Pi-style consumers:
 }
 ```
 
-Unlike BirdNET-Go there are no `BirdImage`/`ClipName` fields — by design,
+There are no image or clip fields — by design,
 no audio is recorded to disk or sent anywhere.
 
 ## Configuration options
@@ -135,13 +134,12 @@ no audio is recorded to disk or sent anywhere.
 - Dockerfile COPY sources all exist; YAMNet download URL verified live
   (redirects to Google Cloud Storage, returns valid TFLite bytes);
   `ffmpeg` is already in the Dockerfile's apt packages (needed for RTSP)
-- MQTT payload fields verified field-by-field against BirdNET-Go's
-  published format (`CommonName`, `ScientificName`, `Confidence`,
+- MQTT payload fields verified (`CommonName`, `ScientificName`, `Confidence`,
   `Date`, `Time`, `Source`); connection pattern (retained messages,
-  Supervisor broker lookup) matches the BirdNET-Go HA app approach
+  Supervisor broker lookup) tested against a mock Supervisor
 - RTSP plumbing (2026-10-12): ffmpeg command builder verified
-  (audio-only `-allowed_media_types audio` first, `-vn` fallback —
-  same as BirdNET-Go); Frigate go2rtc URL builder verified
+  (audio-only `-allowed_media_types audio` first, `-vn` fallback);
+  Frigate go2rtc URL builder verified
   (`rtsp://<host>:8554/<camera>`); source selection logic tested
   (mic default / rtsp / frigate single+multi / frigate priority /
   fatal-on-missing-config paths); live pipe test with ffmpeg-generated
