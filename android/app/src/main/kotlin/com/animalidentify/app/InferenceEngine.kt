@@ -15,16 +15,21 @@ import kotlin.math.sqrt
  *  YAMNet (15600-sample windows, hop 7680) -> mean-pool -> [1, 521] ->
  *  mammal head -> softmax -> top class + confidence.
  *
- * Model config is centralized here so the real 6-class model drops in later.
+ * Model config is centralized here so future models drop in with one edit.
  */
 object ModelConfig {
     const val YAMNET_ASSET = "yamnet.tflite"
     const val HEAD_ASSET = "mammal-head.tflite"
-    const val MODEL_VERSION = "mammal-head-draft-v1"
+    const val MODEL_VERSION = "mammal-head-4class-v1"
 
-    /** Draft model classes. Replace with 6-class list when the real model ships. */
-    val CLASSES = listOf("wolf", "fox")
-    val CLASS_DISPLAY = mapOf("wolf" to "Wolf", "fox" to "Fox")
+    /** Real 4-class model: wolf, coyote, moose, dog. Trained 2026-10-12, 66.6% on verified clips. */
+    val CLASSES = listOf("wolf", "coyote", "moose", "dog")
+    val CLASS_DISPLAY = mapOf(
+        "wolf" to "Wolf",
+        "coyote" to "Coyote",
+        "moose" to "Moose",
+        "dog" to "Dog"
+    )
 
     const val SAMPLE_RATE_IN = 48000
     const val SAMPLE_RATE_YAMNET = 16000
