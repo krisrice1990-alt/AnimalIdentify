@@ -72,6 +72,26 @@ Tip: `frigate_host` accepts the Frigate app's internal hostname
 6. Four new sensors appear automatically:
    `sensor.mammal_listener_wolf`, `..._coyote`, `..._moose`, `..._dog`
 
+## Bug Reports
+
+Found a problem? Report it from inside the app — no GitHub account
+fiddling required:
+
+1. Open the **Mammal Listener** panel in your Home Assistant sidebar
+   (the bug icon), or visit `http://<ha-host>:8099` directly.
+2. Fill in the title, what happened, and how to reproduce it.
+3. Click **Generate GitHub issue** — a pre-filled issue opens in a new
+   tab, with your app version and settings diagnostics attached
+   automatically (no passwords or stream URLs are ever included).
+4. Click **Submit new issue** on GitHub to send it.
+
+The report goes straight to the project's issue tracker:
+https://github.com/krisrice1990-alt/AnimalIdentify/issues
+
+To turn the panel off, set `webui_enabled: false` in the app
+configuration (the `webui_port` option, default `8099`, controls the
+direct-access port).
+
 ## MQTT topics
 
 Base topic (configurable): `mammal_listener`
@@ -120,6 +140,8 @@ no audio is recorded to disk or sent anywhere.
 | `frigate_host` | `""` | Frigate hostname (e.g. `ccab4aaf-frigate`) or IP |
 | `frigate_camera` | `""` | Single Frigate camera name |
 | `frigate_cameras` | `[]` | Multiple Frigate camera names (each runs detection) |
+| `webui_enabled` | `true` | Bug-report web UI on/off |
+| `webui_port` | `8099` | Port for the bug-report UI (also the ingress port) |
 
 ## What's tested vs not
 
@@ -168,6 +190,7 @@ over MQTT. No audio is recorded to disk or sent anywhere.
 - `Dockerfile` — builds the image (bundles YAMNet + the 4-class model)
 - `build.yaml` — base images per architecture
 - `listener/detector.py` — the whole pipeline
+- `listener/webui.py` — bug-report web UI (stdlib only, no extra deps)
 - `listener/requirements.txt` — Python deps
 - `models/mammal-head.tflite` — trained 4-class classifier (bundled)
 - `rootfs/` — s6 service definition
