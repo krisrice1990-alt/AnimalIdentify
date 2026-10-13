@@ -9,7 +9,7 @@ Pipeline (matches mammal-model/INTERFACE.md):
 Audio sources (see listener/audio_sources.py):
   - local microphone (default, `audio_source: mic`)
   - any RTSP URL, e.g. an IP camera (`audio_source: rtsp`,
-    `rtsp_url: rtsp://...`) — ffmpeg pulls audio-only first, like BirdNET-Go
+    `rtsp_url: rtsp://...`) — ffmpeg pulls audio-only first
   - Frigate cameras via go2rtc restream (`frigate_enabled: true`)
 
 Only windows that pass the energy gate reach YAMNet, so a quiet porch costs
@@ -38,16 +38,21 @@ from audio_sources import (
     SourceLost,
     build_frigate_url,
 )
+import webui
 
 # 4-class model v1: wolf, coyote, moose, dog.
 # (Bear dropped — no real recordings exist; fox excluded — unverified.)
 # Clean-test accuracy on Kris-verified audio: 66.6%.
 CLASSES = ["wolf", "coyote", "moose", "dog"]
+
+# App version (keep in sync with `version:` in config.yaml and
+# listener/webui.py). Shown in the bug-report UI diagnostics.
+APP_VERSION = "1.0.0"
 SR = 48000
 WIN_S = 3.0
 WIN_N = int(SR * WIN_S)
 
-# BirdNET-Go-compatible species names (dual-dialect payload).
+# Species names for the dual-dialect payload.
 SPECIES_INFO = {
     "wolf": ("Gray Wolf", "Canis lupus"),
     "coyote": ("Coyote", "Canis latrans"),
@@ -79,7 +84,7 @@ def load_tflite(path):
 
 
 def supervisor_mqtt_config():
-    """Pull MQTT broker credentials from the HA Supervisor, BirdNET-Go style.
+    """Pull MQTT broker credentials from the HA Supervisor.
 
     Returns (host, port, username, password, use_tls) or None if the
     Supervisor API is unavailable or no MQTT service is configured.
@@ -217,8 +222,8 @@ def run_source(label, source, yamnet, head, ctx):
             common, scientific = SPECIES_INFO[cls]
             conf = round(float(scores[top]), 4)
             dt = time.localtime(now)
-            # Dual-dialect payload: PascalCase = BirdNET-Go, snake_case =
-            # BirdNET-Pi. Any HA setup that understands BirdNET-Go
+            # Dual-dialect payload: PascalCase and snake_case field names.
+            # Any HA setup that understands either dialect
             # understands this with zero changes. "Camera" names the audio
             # source (mic / rtsp / frigate:<camera>).
             payload = {
@@ -251,6 +256,10 @@ def run_source(label, source, yamnet, head, ctx):
 def main():
     opt = load_options()
 
+    # Bug-report web UI first: runs in its own daemon thread so it stays
+    # reachable even if the detector later fails on MQTT/model config.
+    webui.start(opt, version=APP_VERSION)
+
     # Model: bundled in the image, overridable via the `model_path` option.
     head_path = opt.get("model_path") or "/app/models/mammal-head.tflite"
     if not os.path.exists(head_path):
@@ -275,7 +284,7 @@ def main():
 
     base = opt["base_topic"].strip().strip("/")
 
-    # MQTT connection: BirdNET-Go style. When mqtt_auto_config is on (default),
+    # MQTT connection. When mqtt_auto_config is on (default),
     # broker credentials come straight from the HA Supervisor — no manual entry.
     # Falls back to the manual mqtt_host/port/user/password options.
     mqtt_host = opt.get("mqtt_host") or ""
