@@ -10,6 +10,10 @@ startup: application
 boot: auto
 audio: true
 hassio_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:bug
+panel_title: Mammal Listener
 map:
   - share:rw
 options:
@@ -30,6 +34,8 @@ options:
   frigate_host: ""
   frigate_camera: ""
   frigate_cameras: []
+  webui_enabled: true
+  webui_port: 8099
 schema:
   mqtt_auto_config: bool
   mqtt_host: str
@@ -48,3 +54,5 @@ schema:
   frigate_host: str
   frigate_camera: str
   frigate_cameras: ["str"]
+  webui_enabled: bool
+  webui_port: int
