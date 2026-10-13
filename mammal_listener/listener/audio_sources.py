@@ -13,7 +13,7 @@ Interface:
   stop()                       release resources
   describe() -> str             human-readable label for logs
 
-RtspSource follows BirdNET-Go's approach: request audio-only from the
+RtspSource requests audio-only from the
 camera first (`-allowed_media_types audio`, so no video decoder slot is
 wasted on the camera), and fall back to the full stream with `-vn` when
 the audio-only handshake never delivers audio. After two consecutive
@@ -205,7 +205,7 @@ class RtspSource:
         if not self._wait_for_audio(AUDIO_ONLY_TIMEOUT_S):
             self._kill()
             if use_audio_only:
-                # BirdNET-Go behaviour: audio-only first, fall back to the
+                # Behaviour: audio-only first, fall back to the
                 # full stream (video discarded) when the camera can't do
                 # an audio-only handshake.
                 self._audio_only_failures += 1
